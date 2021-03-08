@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 type problem struct {
@@ -21,40 +23,57 @@ func parseProblem(problemFile string) []problem {
 	f, err := os.Open(problemFile)
 	defer f.Close()
 	if err != nil {
-		exit("Cannot open problem file...")
+		exit("Failed to open problem file...")
 	}
 
 	csvReader := csv.NewReader(f)
 	records, err := csvReader.ReadAll()
 	if err != nil {
-		exit("Cannot read problem file...")
+		exit("Failed to read problem file...")
 	}
 
 	var problems = make([]problem, len(records))
-	for i := range records {
-		problems[i].question = records[i][0]
-		problems[i].answer = strings.TrimSpace(records[i][1])
+	for i, record := range records {
+		problems[i] = problem{
+			question: record[0],
+			answer:   strings.TrimSpace(record[1]),
+		}
 	}
 	return problems
 }
 
-func executeQuiz(problemFile string) {
+func executeQuiz(problemFile string, timeout int) {
 	problems := parseProblem(problemFile)
 
 	correctCount := 0
-	var answer string
 	fmt.Println("Quiz starts...")
-	for i := range problems {
-		fmt.Println(problems[i].question)
-		fmt.Scanln(&answer)
-		if answer == problems[i].answer {
-			correctCount++
+	timer := time.NewTimer(time.Duration(timeout) * time.Second)
+	for i, problem := range problems {
+		fmt.Printf("Question #%d: %s\n", i, problem.question)
+		answerCh := make(chan string)
+		go func() {
+			var answer string
+			fmt.Scanln(&answer)
+			answerCh <- answer
+		}()
+		select {
+		case <-timer.C:
+			fmt.Printf("You scored %d out of %d questions\n", correctCount, len(problems))
+			exit("Timeout, quiz is finished...")
+		case answer := <-answerCh:
+			if answer == problem.answer {
+				correctCount++
+			}
 		}
 	}
 
-	fmt.Printf("You scored %d out of %d questions", correctCount, len(problems))
+	fmt.Printf("You scored %d out of %d questions\n", correctCount, len(problems))
 }
 
 func main() {
-	executeQuiz("problems.csv")
+	file := flag.String("file", "problems.csv", "path of problem file")
+	timeout := flag.Int("timeout", 30, "timer duration")
+	flag.Parse()
+
+	executeQuiz(*file, *timeout)
 }
