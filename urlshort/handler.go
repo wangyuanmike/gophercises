@@ -1,7 +1,10 @@
 package urlshort
 
 import (
+	"fmt"
 	"net/http"
+
+	"gopkg.in/yaml.v2"
 )
 
 // MapHandler will return an http.HandlerFunc (which also
@@ -11,8 +14,13 @@ import (
 // If the path is not provided in the map, then the fallback
 // http.Handler will be called instead.
 func MapHandler(pathsToUrls map[string]string, fallback http.Handler) http.HandlerFunc {
-	//	TODO: Implement this...
-	return nil
+	return func(w http.ResponseWriter, r *http.Request) {
+		if url, found := pathsToUrls[r.URL.Path]; found {
+			http.Redirect(w, r, url, http.StatusFound)
+			return
+		}
+		fallback.ServeHTTP(w, r)
+	}
 }
 
 // YAMLHandler will parse the provided YAML and then return
@@ -32,6 +40,26 @@ func MapHandler(pathsToUrls map[string]string, fallback http.Handler) http.Handl
 // See MapHandler to create a similar http.HandlerFunc via
 // a mapping of paths to urls.
 func YAMLHandler(yml []byte, fallback http.Handler) (http.HandlerFunc, error) {
-	// TODO: Implement this...
-	return nil, nil
+	var rules []redirectRule
+	err := yaml.Unmarshal(yml, &rules)
+	if err != nil {
+		fmt.Println("Failed to parse yaml...")
+		fmt.Printf("%v\n", err)
+		return fallback.ServeHTTP, err
+	}
+	ruleMap := convertToMap(rules)
+	return MapHandler(ruleMap, fallback), nil
+}
+
+type redirectRule struct {
+	Path string `yaml:"path"`
+	URL  string `yaml:"url"`
+}
+
+func convertToMap(rules []redirectRule) map[string]string {
+	m := make(map[string]string)
+	for _, r := range rules {
+		m[r.Path] = r.URL
+	}
+	return m
 }
