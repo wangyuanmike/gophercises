@@ -1,0 +1,238 @@
+Let us talk security.
+Now, many people are scared of security,
+much like people might be frightened
+of this ominous, abandoned house.
+You know, the type of house that carefree teenagers
+just have to explore in those campy horror movies.
+It never ends well, does it?
+Well, let me use this scary house
+to hopefully break down AWS security concepts,
+and maybe make it less scary.
+So, in a practical sense, first we have visibility.
+Will I allow you into my driveway?
+Am I gonna open my outer gate?
+Can you see my driveway from the main road?
+That's a way that I can secure my house.
+I can obfuscate it, I can hide it.
+Then we have authentication.
+So, when you knock on my door, am I gonna let you in?
+Do I know it's really you?
+Then we have access control.
+Once you're in my house, what rooms am I going
+to permit you to access?
+Maybe I only allow you into the living room,
+or the kitchen,
+or maybe I give you full access to the whole house.
+Then we have encryption.
+So, if I let you into my study,
+how many people have a study nowadays?
+Anyway, if I let you into my home office, for example,
+am I going to give you the encoder ring
+to read the books that happen to be on the shelf
+that I've happened to protect with encryption?
+Now, these physical real-world concepts
+map over to AWS concepts as well.
+As far as visibility, we can think about the equivalent
+on AWS as VPC endpoints,
+which we'll talk about in a second,
+network access control lists, and security groups.
+Using these things, we can make sure
+that we only allow certain people, or certain callers,
+to see our endpoints, or our servers.
+As far as authentication, Identity and Access Management,
+or IAM, does this job, and it provides services
+so that we can try to determine if the person trying
+to get into our application is indeed
+who they say they are,
+and then once we've authenticated them,
+we can then grant them access to do different things
+with our service, or our application,
+or our instance, and we can do this
+through roles or policies or groups.
+And finally, for encryption,
+we have the Key Management Service, or KMS,
+and in KMS, we can create encryption keys,
+and there are many AWS services that work with KMS natively,
+so that it makes it very easy for us
+to encrypt stuff while using those services.
+Now, this is a pretty typical architecture
+for how we might secure our instances.
+In the innermost layer, we have security groups,
+which are like little firewalls around our instances.
+We have network access control lists,
+which govern which traffic we allow
+in and out of our subnets,
+and then we might also have an internet gateway,
+or a NAT instance, that provides us access to the internet.
+Now, you'll notice also on this diagram something called
+a VPC endpoint talking to S3.
+We're gonna cover that right now.
+Think of a VPC endpoint as a sort of virtual wormhole
+that allows our VPC to communicate with other AWS services,
+without having to exit to the public internet.
+Now, there are two types of VPC endpoints.
+An interface endpoint uses DNS redirection and trickery
+to route traffic to internal addresses of the AWS services,
+versus the public addresses.
+A gateway endpoint uses something called a prefix list,
+which is really just a list of IP addresses
+for that AWS service,
+and that prefix list is inserted
+into the route table of our VPC,
+and the traffic is routed via internal connection,
+versus through the public internet by the router.
+Now, gateway endpoints are really only relevant
+to S3 and Dynamo,
+and you might also hear VPC endpoints
+referred to as PrivateLink, 'cause this is the AWS service
+that powers interface endpoints.
+Let's take a look at an example.
+So, in this case, we have a notebook instance
+that is secured by a security group, a network ACL.
+It is inside a VPC, and it is inside AWS.
+However, without VPC endpoints,
+we would have to exit through the internet gateway
+to the public internet to access the SageMaker API
+and S3, for example, because those are public services,
+and they don't live in someone's VPC.
+Now instead, we can create VPC endpoints inside our VPC,
+which gives us a back-alley pathway
+to those services that uses AWS' network,
+and because we're not going through the public internet,
+it improves our security posture.
+Additionally, it may lower our cost,
+because we don't have to pay egress charges
+for the data that goes out to those services.
+Now, something else we can also do
+is when we create a model for the first time,
+we can tell SageMaker
+which subnets and security groups we want
+the SageMaker training job to use,
+and then SageMaker would create
+an elastic network interface linking the subnets
+to the training containers.
+Now, there are some security implications
+that you should know about when using notebook instances.
+First, they're internet-enabled by default.
+So, by default your SageMaker notebooks
+can access the internet,
+and they do this to allow for ease-of-use
+and the ability to download some popular,
+publicly-available packages and libraries,
+but some companies see this as a potential threat,
+because you could bring in some malware.
+So, when we create the notebook instance,
+we can disable internet access,
+but to train the models, we're gonna need
+to either ensure that we have a NAT gateway,
+or a NAT instance, with the proper default routes,
+or we need to set up an interface endpoint
+to the SageMaker services,
+and AWS recommends that we don't share
+Jupyter notebooks across people.
+They're really designed to be used by one person,
+and AWS recommends for security purposes
+to keep it one-to-one.
+Now, we can also use IAM policies
+to restrict the user accounts
+that can use certain notebooks.
+You are going to have to know some stuff
+about IAM policies,
+and there's two main types of policies.
+One is an identity-based policy,
+and one is a resource-based policy, and quite simply,
+the difference is that the identity-based policy
+is attached to identities, like users and groups,
+whereas the resource-based policy
+is assigned to resources like S3, or KMS, or SQS.
+Now, with identity-based policies,
+that allows us to allow or deny access
+to roles or users, whereas resource-based policies allow us
+to do the same thing for resources.
+An example of us using an identity-based policy
+is maybe we wanted to allow a user, Mary,
+only access to Mary's notebook.
+Resource-based policies,
+we can use those to restrict access,
+maybe read-write access, to an S3 bucket.
+Here's an example of an IAM permissions policy
+that we might attach to an IAM user.
+Now, one special note here,
+some SageMaker actions, like create model,
+and create training job,
+require the user to pass an IAM role
+to SageMaker so that the service
+can assume those permissions to attempt the action,
+and in this example, we allow the action iam:PassRole,
+so that the user of this policy
+has the ability to hand off their role
+to the SageMaker service.
+Let's talk about encryption, and oh, by the way,
+here's my public encryption key,
+if anybody wants to send me some super-secret documents
+that reveal how the universe works.
+Feel free to send them,
+and be sure to encrypt them, by the way.
+So, we can think of encryption
+as really two types, or two forms.
+One is encryption at rest, and that just means
+that when the data is stored, it's encrypted,
+and then we also have encryption in transit,
+which means that the data is encrypted
+when it's being transferred from point to point.
+A generic example of an encryption at rest
+is if we happen to use GPG to encrypt a file
+before we store it on a hard drive.
+For encryption at transit, we use this all the time,
+using TLS to encrypt an HTTP stream.
+Some people may call this SSL.
+Now, as far as AWS services,
+we can encrypt at rest all the data that stores
+in a S3 bucket, for example,
+by using the S3 KMS encryption feature.
+We could also use our own KMS keys.
+For encryption in transit,
+an example of this could be
+we could use the AWS Certificate Manager
+in conjunction with CloudFront
+to cache a website using a custom domain.
+Now, AWS has done a really good job
+of incorporating encryption
+into the various SageMaker products,
+and as we can see here, when we create a notebook instance,
+we can select an encryption key.
+Also, when we create a training job,
+we can also select an encryption key,
+and when we're creating endpoints,
+or batch transform jobs,
+we can also select the encryption key
+that we might wanna use.
+Now, all these examples are encryption at rest.
+For an example of encryption in transit,
+we can look at the standard deployment landscape
+that we've talked about in the past,
+and by default, everything is already using HTTPS,
+which means it's encrypted,
+and you'd have to work really, really hard
+to figure out a way to not use HTTPS
+when you're using SageMaker.
+Even the connection between the SageMaker API
+in our application and the HTTPS endpoint
+is encrypted using TLS.
+Now, when we build our hosted model,
+we're gonna be given an endpoint name
+that's just a computer-generated name,
+which we would plug into our SageMaker API
+inside our application,
+but what if we wanted to provide external access
+to our super-special model,
+and maybe perhaps sell subscriptions using it?
+We could do something like this.
+We could set up an API Gateway using a custom domain,
+with a TLS certificate provided by AWS Certificate Manager.
+We could then use a lambda function
+to pass in the requests received from the API Gateway,
+and we would have access to all the features of API Gateway,
+like client certificates, throttling,
+and AWS Marketplace integration
+for creating a SaaS business
