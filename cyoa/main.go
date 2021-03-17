@@ -2,121 +2,121 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"log"
 	"net/http"
 	"os"
+	"strings"
 	"text/template"
 )
 
-// An Arc is a complete section of CYOA book
-type Arc struct {
-	Title   string   `json:"title"`
-	Story   []string `json:"story"`
-	Options []struct {
-		Text string `json:"text"`
-		Arc  string `json:"arc"`
-	} `json:"options"`
+var tpl *template.Template
+
+func init() {
+	tpl = template.Must(template.ParseFiles("view.html"))
 }
 
-// Book is the top struct representing a CYOA book
-type Book struct {
-	Intro     Arc `json:"intro,omitempty"`
-	NewYork   Arc `json:"new-york,omitempty"`
-	Debate    Arc `json:"debate,omitempty"`
-	SeanKelly Arc `json:"sean-kelly,omitempty"`
-	MarkBates Arc `json:"mark-bates,omitempty"`
-	Denver    Arc `json:"denver,omitempty"`
-	Home      Arc `json:"home,omitempty"`
+// A Chapter is a chapter of a CYOA story
+type Chapter struct {
+	Title      string   `json:"title"`
+	Paragraphs []string `json:"story"`
+	Options    []option `json:"options"`
 }
 
-func exit(err error) {
-	fmt.Println(err)
-	os.Exit(1)
+type option struct {
+	Text    string `json:"text,omitempty"`
+	Chapter string `json:"arc,omitempty"`
 }
 
-func loadJSON(fileName string) []byte {
-	jsonFile, err := os.Open(fileName)
-	if err != nil {
-		exit(err)
+type story map[string]Chapter
+
+func loadStory(r io.Reader) (story, error) {
+	var s story
+	decoder := json.NewDecoder(r)
+	if err := decoder.Decode(&s); err != nil {
+		return nil, err
 	}
-	defer jsonFile.Close()
+	return s, nil
+}
 
-	jsonByte, err := ioutil.ReadAll(jsonFile)
-	if err != nil {
-		exit(err)
+type handler struct {
+	t      *template.Template
+	s      story
+	pathfn func(*http.Request) string
+}
+
+func defaultPathFn(r *http.Request) string {
+	path := strings.TrimSpace(r.URL.Path)
+	if path == "" || path == "/" {
+		path = "/intro"
 	}
-	return jsonByte
+	return path[1:]
 }
 
-func parseJSON(jsonByte []byte) Book {
-	var book Book
-	err := json.Unmarshal(jsonByte, &book)
-	if err != nil {
-		exit(err)
-	}
-	return book
-}
-
-func getArc(book Book, path string) Arc {
-	arc := Arc{}
-
-	switch path {
-	case "/intro/":
-		arc = book.Intro
-	case "/new-york/":
-		arc = book.NewYork
-	case "/debate/":
-		arc = book.Debate
-	case "/sean-kelly/":
-		arc = book.SeanKelly
-	case "/mark-bates/":
-		arc = book.MarkBates
-	case "/denver/":
-		arc = book.Denver
-	case "/home/":
-		arc = book.Home
-	}
-	return arc
-}
-
-// httpCache is to cache init information before starting http server
-type httpCache struct {
-	Template *template.Template
-	book     Book
-}
-
-func (c *httpCache) parseTemplate(templateFile string) {
-	c.Template = template.Must(template.ParseFiles(templateFile))
-}
-
-func (c *httpCache) loadBook(bookFile string) {
-	c.book = parseJSON(loadJSON(bookFile))
-}
-
-func viewHandler(c httpCache) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println(r.URL.Path)
-		err := c.Template.ExecuteTemplate(w, c.Template.Name(), getArc(c.book, r.URL.Path))
+func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	path := h.pathfn(r)
+	if chapter, ok := h.s[path]; ok {
+		err := h.t.Execute(w, chapter)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("%v", err)
+			http.Error(w, "Something went wrong...", http.StatusInternalServerError)
 		}
+		return
 	}
+	http.Error(w, "Chapter not found", http.StatusNotFound)
+}
+
+type handlerOption func(h *handler)
+
+func WithTemplate(t *template.Template) handlerOption {
+	return func(h *handler) {
+		h.t = t
+	}
+}
+
+func WithPathFn(fn func(*http.Request) string) handlerOption {
+	return func(h *handler) {
+		h.pathfn = fn
+	}
+}
+
+func pathfn(r *http.Request) string {
+	path := strings.TrimSpace(r.URL.Path)
+	if path == "/story" || path == "/story/" {
+		path = "/story/intro"
+	}
+	return path[len("/story/"):]
+}
+
+func NewHandler(s story, opts ...handlerOption) http.Handler {
+	h := handler{tpl, s, defaultPathFn}
+	for _, opt := range opts {
+		opt(&h)
+	}
+	return h
 }
 
 func main() {
-	var c httpCache
-	c.parseTemplate("view.html")
-	c.loadBook("gopher.json")
+	port := flag.Int("port", 8080, "the port that http server is listening")
+	filename := flag.String("file", "gopher.json", "the JSON file with the CYOA story")
+	flag.Parse()
+	fmt.Printf("Using the story in %s.\n", *filename)
 
-	http.HandleFunc("/intro/", viewHandler(c))
-	http.HandleFunc("/new-york/", viewHandler(c))
-	http.HandleFunc("/debate/", viewHandler(c))
-	http.HandleFunc("/sean-kelly/", viewHandler(c))
-	http.HandleFunc("/mark-bates/", viewHandler(c))
-	http.HandleFunc("/denver/", viewHandler(c))
-	http.HandleFunc("/home/", viewHandler(c))
+	f, err := os.Open(*filename)
+	if err != nil {
+		panic(f)
+	}
+	defer f.Close()
+	story, err := loadStory(f)
+	prettyTpl := template.Must(template.ParseFiles("pretty.html"))
+	handler := NewHandler(story, WithTemplate(prettyTpl), WithPathFn(pathfn))
 
-	fmt.Println("Start listening on port 8080...")
-	http.ListenAndServe(":8080", nil)
+	mux := http.NewServeMux()
+	mux.Handle("/story/", handler)
+	mux.Handle("/", NewHandler(story))
+
+	fmt.Println("Start HTTP server on port 8080...")
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *port), mux))
 }
