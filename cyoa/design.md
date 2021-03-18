@@ -60,7 +60,7 @@ func main() {
 type handlerOption func(h *handler)
 ```
 * Functional option is a design pattern that could handle creating instance with opitons neatly. 
-* Basically the factory function accepts [0, N] options, each of which is a function. It first create instance with default value(or we say default constructor), and then executes each functional option to manipulate corresponding property with custom value that is defined in the corresponding function. 
+* Basically the handler factory function NewHandler() accepts [0, N] options, each of which is a function. NewHandler() first creates handler instance with default value, and then executes each functional option to manipulate corresponding property with custom value that is defined in the corresponding function. 
 * Functional option is raised by [Robert Pike](https://commandcenter.blogspot.com/2014/01/self-referential-functions-and-design.html) and [Dave Cheney](https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis).
 ## Create functional option for custom template
 * Create the custom template file by coping the file from Jon's solution and adjust field names of struct Chapter that are embedded in the file
