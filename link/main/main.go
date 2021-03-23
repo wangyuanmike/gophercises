@@ -10,21 +10,26 @@ import (
 	html "golang.org/x/net/html"
 )
 
-func traverseHTML(f io.Reader) {
+func htmlTree(f io.Reader) {
 	doc, err := html.Parse(f)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Level:\tType\tDataAtom\tData\tAttr\n")
 
 	var fn func(*html.Node, int)
-	fn = func(n *html.Node, level int) {
-		//if n.Type == html.ElementNode && n.Data == "a" {
-		fmt.Printf("%d:\t%d\t%v\t\t%v\t%v\n", level, n.Type, n.DataAtom, n.Data, n.Attr)
-		level++
-		//}
+	fn = func(n *html.Node, padding int) {
+		for i := 0; i < padding; i++ {
+			fmt.Printf("\t")
+		}
+		msg := n.Data
+		if n.Type == html.ElementNode {
+			msg = fmt.Sprintf("<%v>", msg)
+		}
+		fmt.Println(msg)
+
+		padding++
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			fn(c, level)
+			fn(c, padding)
 		}
 	}
 	fn(doc, 0)
@@ -40,7 +45,15 @@ func main() {
 	}
 	defer f.Close()
 
-	fmt.Println("Call functions from package link...")
+	//htmlTree(f)
+	//
+	//The same html file could not be parsed by html.Parse() twice,
+	//otherwise the second parse would only return the top 3 level
+	//of the html tree structure from the root node.
+	//Therefore the htmlTree(f) must be commented out, although
+	//it is just to print out the html tree structure fore pre-check.
+	//This might be a bug of the html x package
+
 	b, err := link.CollectLinks(f)
-	fmt.Printf("byte:\t%s\n", b)
+	fmt.Printf("%s\n", b)
 }
