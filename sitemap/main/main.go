@@ -11,6 +11,6 @@ func main() {
 	depth := flag.Int("depth", 1, "Depth of sitemap")
 	flag.Parse()
 
-	sitemap.CollectSitemap(*addr, *depth, 0)
+	sitemap.CollectSitemap(*addr, *depth)
 	sitemap.GenerateXML()
 }

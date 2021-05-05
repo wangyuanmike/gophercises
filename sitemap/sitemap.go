@@ -1,6 +1,7 @@
 package sitemap
 
 import (
+	"container/list"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -23,10 +24,10 @@ type urlset struct {
 	Xmlns string `xml:"xmlns,attr"`
 }
 
-var sitemap map[string]interface{}
+var sitemap map[string]struct{}
 
 func init() {
-	sitemap = make(map[string]interface{})
+	sitemap = make(map[string]struct{})
 }
 
 func GenerateXML() {
@@ -46,23 +47,30 @@ func GenerateXML() {
 	fmt.Println()
 }
 
-func CollectSitemap(addr string, depth int, count int) {
-	if count == depth {
-		return
-	}
+type Page struct {
+	link  string
+	level int
+}
 
+// BFS implementation
+func CollectSitemap(addr string, depth int) {
 	domain := Domain(addr)
-	links := CollectPageLinks(addr)
-	AddDomain(domain, &links)
-	Filter(domain, &links)
-	if len(links) == 0 {
-		return
-	}
-	AddToSitemap(links)
-	count++
-
-	for _, link := range links {
-		CollectSitemap(link.Href, depth, count)
+	q := list.New()
+	q.PushBack(Page{link: addr, level: 1})
+	for q.Len() > 0 {
+		p := q.Front()
+		q.Remove(p)
+		page := p.Value.(Page)
+		links := CollectPageLinks(page.link)
+		AddDomain(domain, &links)
+		AddToSitemap(links)
+		if page.level == depth {
+			continue
+		}
+		for _, l := range links {
+			level := page.level + 1
+			q.PushBack(Page{link: l.Href, level: level})
+		}
 	}
 }
 
@@ -85,9 +93,9 @@ func CollectPageLinks(addr string) []link.Link {
 }
 
 func AddDomain(domain string, links *[]link.Link) {
-	for _, link := range *links {
-		if Domain(link.Href) == "" {
-			link.Href = "https://" + domain + "/" + link.Href
+	for _, l := range *links {
+		if strings.HasPrefix(l.Href, "/") {
+			l.Href = "https://" + domain + "/" + l.Href
 		}
 	}
 }
@@ -107,20 +115,20 @@ func Domain(addr string) string {
 
 func Filter(domain string, links *[]link.Link) {
 	tmp := make([]link.Link, 0)
-	for _, link := range *links {
-		_, ok := sitemap[link.Href]
+	for _, l := range *links {
+		_, ok := sitemap[l.Href]
 		if ok == true {
 			continue
 		}
-		if Domain(link.Href) == domain {
-			tmp = append(tmp, link)
+		if Domain(l.Href) == domain {
+			tmp = append(tmp, l)
 		}
 	}
 	*links = tmp
 }
 
 func AddToSitemap(links []link.Link) {
-	for _, link := range links {
-		sitemap[link.Href] = ""
+	for _, l := range links {
+		sitemap[l.Href] = struct{}{}
 	}
 }
